@@ -717,8 +717,722 @@ graph TB
 ```
 ---
 
-## Технические сценарии
+
+### Ключевые принципы построения
+
+- **gRPC** — основной протокол для синхронного взаимодействия между микросервисами (быстро, строгий контракт, поддержка стримов).
+- **Apache Kafka** — асинхронная шина событий, обеспечивает слабую связность и устойчивость к пиковым нагрузкам.
+- **Redis** — сверхбыстрое кэширование «горячих» данных (сессии, профили, права доступа, геопозиция, счётчики).
+- **C++** — для сервисов с экстремальными требованиями к производительности (чат, каналы, карты, знакомства, лента, поиск, звонки).
+- **Go** — для сервисов со средней нагрузкой, где важна простота разработки и хорошая работа с сетью (авторизация, профили, друзья, уведомления, медиа, сообщества).
+- **Database-per-service** — каждый сервис владеет своей БД (PostgreSQL), при необходимости шардирование и партиционирование.
+- **API Gateway** — единая точка входа, валидация JWT, маршрутизация, преобразование REST → gRPC.
 
 ---
 
-## План разработки и тестирования
+# Технические сценарии
+
+```markdown
+# Техническое решение проекта «Многофункциональное социально-гибридное приложение»
+
+## Архитектура системы
+
+```mermaid
+graph TB
+    subgraph Клиент
+        WEB[Веб-клиент<br/>React]
+    end
+
+    subgraph "API Gateway (Go)"
+        GW[API Gateway<br/>Kong/Traefik]
+    end
+
+    subgraph "Go-сервисы (Павел)"
+        AUTH[Auth Service - Go]
+        PROFILE[Profile Service - Go]
+        FRIENDS[Friends Service - Go]
+        NOTIFY[Notification Service - Go]
+        MEDIA[Media Service - Go]
+        COMMUNITY[Community Service - Go]
+    end
+
+    subgraph "Python-сервис (Павел)"
+        ML[ML Service - Python<br/>Recommendations]
+    end
+
+    subgraph "C++-сервисы (Владимир)"
+        CHAT[Chat Service - C++]
+        CHANNEL[Channel Service - C++]
+        MAPS[Maps Service - C++]
+        DATING[Dating Service - C++]
+        FEED[Feed Service - C++]
+        CALL[Call Service - C++]
+        SEARCH[Search Service - C++]
+    end
+
+    subgraph "PostgreSQL (Database-per-service)"
+        AUTH_DB[(Auth DB)]
+        PROFILE_DB[(Profile DB)]
+        FRIENDS_DB[(Friends DB)]
+        NOTIFY_DB[(Notify DB)]
+        MEDIA_DB[(Media DB)]
+        COMMUNITY_DB[(Community DB)]
+        ML_DB[(ML DB)]
+        CHAT_DB[(Chat DB)]
+        CHANNEL_DB[(Channel DB)]
+        MAPS_DB[(Maps DB<br/>PostGIS)]
+        DATING_DB[(Dating DB)]
+        FEED_DB[(Feed DB)]
+        CALL_DB[(Call DB)]
+        SEARCH_DB[(Search DB)]
+    end
+
+    subgraph "Redis (Cache-per-service)"
+        AUTH_REDIS[(Auth Redis)]
+        PROFILE_REDIS[(Profile Redis)]
+        FRIENDS_REDIS[(Friends Redis)]
+        NOTIFY_REDIS[(Notify Redis)]
+        MEDIA_REDIS[(Media Redis)]
+        COMMUNITY_REDIS[(Community Redis)]
+        ML_REDIS[(ML Redis)]
+        CHAT_REDIS[(Chat Redis)]
+        CHANNEL_REDIS[(Channel Redis)]
+        MAPS_REDIS[(Maps Redis)]
+        DATING_REDIS[(Dating Redis)]
+        FEED_REDIS[(Feed Redis)]
+        CALL_REDIS[(Call Redis)]
+        SEARCH_REDIS[(Search Redis)]
+    end
+
+    subgraph "Топики Kafka (тематические)"
+        K_UL[user-lifecycle]
+        K_SG[social-graph]
+        K_CC[content-channel]
+        K_CM[content-community]
+        K_MSG[messaging]
+        K_LOC[location]
+        K_DT[dating]
+        K_CALL[calls]
+        K_MEDIA[media]
+    end
+
+    subgraph "Внешние интеграции"
+        SMS[SMS-провайдер]
+        EMAIL[Email-сервис]
+        PUSH[Push-уведомления]
+        MAPS_API[Картографический API]
+        S3[Облачное хранилище<br/>S3-compatible]
+    end
+
+    %% Потоки от клиента
+    WEB --> GW
+
+    %% Маршрутизация Gateway -> Сервисы
+    GW --> AUTH
+    GW --> PROFILE
+    GW --> FRIENDS
+    GW --> NOTIFY
+    GW --> MEDIA
+    GW --> COMMUNITY
+    GW --> ML
+    GW --> CHAT
+    GW --> CHANNEL
+    GW --> MAPS
+    GW --> DATING
+    GW --> FEED
+    GW --> CALL
+    GW --> SEARCH
+
+    %% Связи сервисов со своими БД
+    AUTH --> AUTH_DB
+    PROFILE --> PROFILE_DB
+    FRIENDS --> FRIENDS_DB
+    NOTIFY --> NOTIFY_DB
+    MEDIA --> MEDIA_DB
+    COMMUNITY --> COMMUNITY_DB
+    ML --> ML_DB
+    CHAT --> CHAT_DB
+    CHANNEL --> CHANNEL_DB
+    MAPS --> MAPS_DB
+    DATING --> DATING_DB
+    FEED --> FEED_DB
+    CALL --> CALL_DB
+    SEARCH --> SEARCH_DB
+
+    %% Per-service Redis (Cache -> DB)
+    AUTH --> AUTH_REDIS
+    PROFILE --> PROFILE_REDIS
+    FRIENDS --> FRIENDS_REDIS
+    NOTIFY --> NOTIFY_REDIS
+    MEDIA --> MEDIA_REDIS
+    COMMUNITY --> COMMUNITY_REDIS
+    ML --> ML_REDIS
+    CHAT --> CHAT_REDIS
+    CHANNEL --> CHANNEL_REDIS
+    MAPS --> MAPS_REDIS
+    DATING --> DATING_REDIS
+    FEED --> FEED_REDIS
+    CALL --> CALL_REDIS
+    SEARCH --> SEARCH_REDIS
+
+    %% Публикация событий в Kafka (Producer -> Topic)
+    AUTH -- "user.registered, user.2fa" --> K_UL
+    PROFILE -- "profile.updated, privacy.changed" --> K_UL
+    FRIENDS -- "friend.request, friend.accepted, friend.removed" --> K_SG
+    COMMUNITY -- "community.post, community.comment, community.reaction" --> K_CM
+    CHANNEL -- "channel.post, channel.subscribe" --> K_CC
+    CHAT -- "message.sent, message.read, chat.created" --> K_MSG
+    MAPS -- "location.updated, place.saved" --> K_LOC
+    DATING -- "match.created, like, skip" --> K_DT
+    CALL -- "call.started, call.ended" --> K_CALL
+    MEDIA -- "media.uploaded, media.processed" --> K_MEDIA
+    ML -- "recommendation.updated" --> K_UL
+    ML -- "recommendation.updated" --> K_CC
+    ML -- "recommendation.updated" --> K_DT
+
+    %% Потребление событий из Kafka (Topic -> Consumer)
+    K_UL --> NOTIFY
+    K_UL --> FEED
+    K_UL --> ML
+    K_UL --> SEARCH
+    K_SG --> NOTIFY
+    K_SG --> CHAT
+    K_SG --> DATING
+    K_CC --> NOTIFY
+    K_CC --> FEED
+    K_CC --> ML
+    K_CC --> SEARCH
+    K_CM --> NOTIFY
+    K_CM --> FEED
+    K_CM --> ML
+    K_CM --> SEARCH
+    K_MSG --> NOTIFY
+    K_MSG --> CHAT
+    K_LOC --> NOTIFY
+    K_LOC --> DATING
+    K_LOC --> FEED
+    K_DT --> NOTIFY
+    K_DT --> CHAT
+    K_DT --> ML
+    K_CALL --> NOTIFY
+    K_MEDIA --> NOTIFY
+
+    %% Внешние интеграции
+    NOTIFY --> SMS
+    NOTIFY --> EMAIL
+    NOTIFY --> PUSH
+    MAPS --> MAPS_API
+    MEDIA --> S3
+
+    %% Стили
+    classDef gateway fill:#e0f7fa,stroke:#00bcd4,stroke-width:2px
+    classDef go fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef python fill:#d4edc9,stroke:#28a745,stroke-width:2px
+    classDef cpp fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef db fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef redis fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
+    classDef kafka fill:#fbe9e7,stroke:#ff5722,stroke-width:2px
+    classDef external fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+
+    class GW gateway
+    class AUTH,PROFILE,FRIENDS,NOTIFY,MEDIA,COMMUNITY go
+    class ML python
+    class CHAT,CHANNEL,MAPS,DATING,FEED,CALL,SEARCH cpp
+    class AUTH_DB,PROFILE_DB,FRIENDS_DB,NOTIFY_DB,MEDIA_DB,COMMUNITY_DB,ML_DB,CHAT_DB,CHANNEL_DB,MAPS_DB,DATING_DB,FEED_DB,CALL_DB,SEARCH_DB db
+    class AUTH_REDIS,PROFILE_REDIS,FRIENDS_REDIS,NOTIFY_REDIS,MEDIA_REDIS,COMMUNITY_REDIS,ML_REDIS,CHAT_REDIS,CHANNEL_REDIS,MAPS_REDIS,DATING_REDIS,FEED_REDIS,CALL_REDIS,SEARCH_REDIS redis
+    class K_UL,K_SG,K_CC,K_CM,K_MSG,K_LOC,K_DT,K_CALL,K_MEDIA kafka
+    class SMS,EMAIL,PUSH,MAPS_API,S3 external
+```
+
+---
+
+# Технические сценарии
+
+## 1. Регистрация нового пользователя
+
+**Участники:**  
+Клиент → API Gateway → Auth Service (Go) → SMS-провайдер, Profile Service (Go), Kafka (топик `user-lifecycle`).
+
+**Последовательность:**
+
+1. **Клиент** отправляет номер телефона (`POST /api/v1/auth/register`).  
+   API Gateway преобразует запрос в **gRPC** `AuthService.Register`.
+
+2. **Auth Service**:
+   - Проверяет уникальность номера в **Auth DB** (PostgreSQL, индекс `phone`).
+   - Генерирует 6-значный код, сохраняет в **Auth Redis** (ключ `sms_code:{phone}`, TTL 5 мин).
+   - Асинхронно отправляет SMS (worker pool, не блокирует ответ).
+
+3. **Клиент** вводит код → `POST /api/v1/auth/verify` → gRPC `AuthService.VerifyCode`.
+   - Проверка кода в Redis, удаление после успеха.
+   - Создание записи пользователя со статусом `pending`, выдача временного JWT.
+
+4. **Клиент** завершает регистрацию (никнейм, пароль):
+   - Проверка уникальности никнейма, хеширование пароля (bcrypt).
+   - Перевод статуса в `active`.
+   - **Публикация события** `user.registered` в Kafka.
+
+5. **Profile Service** (подписчик Kafka):
+   - Создаёт пустой профиль в **Profile DB**.
+   - Кэширует профиль в **Profile Redis** (ключ `profile:{user_id}`, TTL 1ч).
+
+**Оптимизации:**
+- Пул соединений с БД и Redis.
+- Индексы на `phone`, `nickname`.
+- Отправка SMS асинхронно, не задерживая ответ.
+- JWT валидируется на Gateway (без обращения к сервису).
+
+---
+
+## 2. Вход в систему
+
+**Участники:**  
+Клиент → API Gateway → Auth Service (Go), Profile Service, Kafka.
+
+**Последовательность:**
+
+1. **Клиент** → `POST /api/v1/auth/login` (телефон, пароль) → gRPC `AuthService.Login`.
+2. **Auth Service**:
+   - Поиск пользователя по телефону, проверка пароля (bcrypt).
+   - Если **2FA** включена: генерация кода, сохранение в Redis, отправка SMS/Email → ответ `2FA_REQUIRED`.
+   - Иначе: создание **JWT access token** (15 мин) и **refresh token** (7 дней). Refresh token хранится в Redis (`refresh:{user_id}`).
+3. При каждом запросе клиент прикрепляет JWT. API Gateway проверяет подпись без обращения к сервисам.
+4. **Публикация** `user.logged_in` в Kafka (статистика, статус «в сети»).
+
+**Оптимизация:**
+- Валидация JWT на Gateway (нет лишних gRPC-вызовов).
+- Refresh token проверяется через Redis (быстро).
+- Счётчик неудачных попыток в Redis, временная блокировка при превышении.
+
+---
+
+## 3. Редактирование личного профиля
+
+**Участники:**  
+Клиент → API Gateway → Profile Service (Go) → Profile DB, Profile Redis, Media Service (Go), S3, Kafka.
+
+**Последовательность:**
+
+1. **Клиент** → `PATCH /api/v1/profile` → gRPC `ProfileService.UpdateProfile`.
+2. **Profile Service**:
+   - Изменение данных: проверка уникальности никнейма (если меняется).
+   - Если загружается **аватар**:
+     - Клиент получает подписанный URL от **Media Service** и загружает файл напрямую в S3.
+     - После загрузки клиент подтверждает, Profile Service обновляет ссылку в БД.
+     - **Media Service** асинхронно обрабатывает изображение (ресайз, WebP) и сохраняет превью.
+   - Обновление записи в **Profile DB**, **инвалидация кэша** в Redis (удаление ключа `profile:{user_id}`).
+   - **Публикация** `profile.updated` в Kafka.
+3. Подписчики: **Search Service** (переиндексация), **Dating Service** (обновление анкеты) и др.
+
+**Почему так:**
+- Прямая загрузка в S3 разгружает сервисы.
+- Инвалидация кэша гарантирует актуальность данных.
+- Асинхронная обработка медиа не замедляет ответ.
+
+---
+
+## 4. Настройка приватности
+
+**Участники:**  
+Клиент → Profile Service (Go) → Profile DB, Redis, Kafka.
+
+**Последовательность:**
+
+1. **Клиент** → `PUT /api/v1/privacy` → gRPC `ProfileService.SetPrivacy`.
+2. **Profile Service**:
+   - Сохраняет настройки в JSONB-поле в **Profile DB**.
+   - Обновляет кэш в Redis: `privacy:{user_id}` (JSON, TTL 1ч).
+3. **Проверка прав** при любом действии (друзья, чат, карта):
+   - Сервис-потребитель вызывает `ProfileService.CheckPermission`.
+   - Profile Service сначала смотрит Redis → если есть, мгновенный ответ.
+   - Иначе читает БД, кэширует и отвечает.
+
+**Оптимизация:**
+- Кэширование настроек приватности (частые проверки).
+- Pipeline Redis для массовых проверок (например, для отображения 100 друзей на карте).
+
+---
+
+## 5. Управление черным списком
+
+**Участники:**  
+Клиент → Friends Service (Go) → Friends DB, Redis, Kafka.
+
+**Последовательность:**
+
+1. **Клиент** → `POST /api/v1/blacklist` → gRPC `FriendsService.BlockUser`.
+2. **Friends Service**:
+   - Проверка, не заблокирован ли уже.
+   - Запись в таблицу `blocked_users` (user_id, blocked_user_id).
+   - Если были друзья — удаление связи.
+   - **Добавление в Redis SET** `blocked:{user_id}` (ID заблокированных).
+3. При любом взаимодействии (сообщение, просмотр профиля) сервис вызывает `FriendsService.IsBlocked`. Friends Service отвечает по Redis (O(1) — `SISMEMBER`).
+4. **Разблокировка** → удаление из БД и Redis SET.
+
+**Почему Redis:**
+- Проверка блокировки нужна на **каждое действие** — крайне часто.
+- Redis SET даёт мгновенный ответ без нагрузки на БД.
+
+---
+
+## 6. Поиск и добавление в друзья
+
+**Участники:**  
+Клиент → Search Service (C++), Friends Service (Go), Profile Service (Go), Kafka.
+
+**Последовательность:**
+
+1. **Поиск** пользователя по никнейму: `GET /api/v1/search/users?q=...`.
+   - **Search Service** (C++) на базе **Tantivy** (Rust-движок, встраивается в C++).
+   - Индекс обновляется через Kafka (события `profile.updated`, `user.registered`).
+   - Возвращает ранжированный список найденных профилей.
+
+2. **Отправка заявки в друзья**: `POST /api/v1/friends/requests`.
+   - **Friends Service** проверяет блокировки, дубликаты.
+   - Запись в таблицу `friend_requests` (status=pending).
+   - Публикация `friend.request.sent` в Kafka.
+
+3. **Принятие заявки**: `POST /api/v1/friends/requests/{id}/accept`.
+   - Friends Service меняет статус, создаёт запись в `friends`.
+   - Публикует `friend.accepted`.
+   - Подписчики: Dating Service (исключают друзей из рекомендаций), Chat Service (опционально создаёт чат).
+
+**Оптимизация:**
+- Поиск на C++ — максимальная скорость.
+- Уникальный индекс `(from, to)` в БД предотвращает дубли заявок.
+
+---
+
+## 7. Подписка на канал и чтение контента
+
+**Участники:**  
+Клиент → Channel Service (C++) → Channel DB, Redis, Kafka.
+
+**Последовательность:**
+
+1. **Подписка** → gRPC `ChannelService.Subscribe`.
+   - Проверка, не подписан ли уже.
+   - Запись в таблицу `subscriptions`.
+   - **Добавление user_id в Redis SET** `subscribers:{channel_id}` (быстрый подсчёт и проверка).
+   - Публикация `channel.subscribe` в Kafka.
+
+2. **Чтение постов**:
+   - Channel Service отдаёт посты из **кэша Redis**:
+     - Sorted Set `channel_posts:{channel_id}` хранит ID постов по времени.
+     - Hash `post:{post_id}` содержит сам пост.
+   - При промахе — чтение из БД и заполнение кэша.
+
+**Почему C++?**
+- Каналы могут иметь миллионы подписчиков.
+- Операции подписки/отписки должны быть быстрыми.
+- Redis SET и Sorted Set работают за O(log N).
+
+---
+
+## 8. Создание и публикация поста в канале
+
+**Участники:**  
+Клиент → Channel Service (C++), Media Service (Go), S3, Kafka, Feed Service (C++), Notification Service.
+
+**Последовательность:**
+
+1. **Подготовка медиа** (опционально):
+   - Клиент получает подписанные URL от Media Service, загружает файлы в S3.
+
+2. **Создание поста**: `POST /api/v1/channels/{id}/posts` → gRPC `ChannelService.CreatePost`.
+   - Проверка прав (админ/владелец) через Redis `channel_admins:{channel_id}`.
+   - Сохранение поста в **Channel DB**, кэширование в Redis.
+   - Добавление ID поста в sorted set канала.
+   - **Публикация** `channel.post` в Kafka.
+
+3. **Feed Service** (C++):
+   - Получает событие, для **онлайн-подписчиков** доставляет пост через WebSocket/gRPC-стрим.
+   - Для **офлайн** — добавляет ID поста в персонализированную ленту в ClickHouse.
+
+4. **Notification Service** отправляет push-уведомления подписчикам (с учётом настроек muting).
+
+**Оптимизация:**
+- Push для онлайн, pull для офлайн (гибридная модель).
+- Для «супер-каналов» — шардирование подписчиков.
+
+---
+
+## 9. Начало чата и отправка сообщения
+
+**Участники:**  
+Клиент → Chat Service (C++), Chat DB, Redis, Kafka, Notification Service.
+
+**Последовательность:**
+
+1. **Установка соединения**:
+   - WebSocket или gRPC-бидирекциональный стрим.
+   - Chat Service регистрирует канал в локальной памяти (`user_connections`).
+
+2. **Отправка сообщения**:
+   - Валидация (длина, фильтр спама — кольцевой фильтр Блума на C++).
+   - Проверка прав: является ли участником чата? Проверка по Redis SET `chat_members:{chat_id}`.
+   - Асинхронное сохранение в **Chat DB** (партиционирование по `chat_id`).
+   - **Увеличение счётчика непрочитанных** в Redis (`unread:{user_id}:{chat_id}`, атомарный INCR).
+   - Рассылка онлайн-участникам (локально или через gRPC на другие инстансы).
+   - Публикация `message.sent` в Kafka.
+
+3. **Обновление статуса «прочитано»**:
+   - Клиент отправляет `ReadReceipt`.
+   - Сброс счётчика непрочитанных в Redis, обновление в БД.
+
+**Почему C++:**
+- Десятки тысяч сообщений/сек.
+- epoll/io_uring, минимальные накладные расходы.
+- Блум-фильтр на C++ работает очень быстро.
+
+---
+
+## 10. Использование раздела «Знакомства» для поиска партнёра
+
+**Участники:**  
+Клиент → Dating Service (C++), ML Service (Python), Dating DB, Redis, Kafka.
+
+**Последовательность:**
+
+1. **Загрузка анкеты**:
+   - Клиент запрашивает `GET /api/v1/dating/candidates`.
+   - Dating Service вызывает gRPC `MLService.GetRecommendations`.
+   - ML Service использует **предвычисленные рекомендации** в Redis (sorted set `recs:{user_id}`), обновляемые раз в час.
+   - Возвращает список user_id, Dating Service дополняет данными профиля.
+
+2. **Лайк**: `POST /api/v1/dating/like`.
+   - Проверка дневного лимита в Redis (`likes_today:{user_id}`, TTL 24ч, INCR).
+   - Сохранение лайка в БД.
+   - **Проверка взаимности**: смотрит в Redis `liked_me:{to_user}` (SET) — есть ли там ID текущего?
+     - Если нет → просто сохраняет лайк, добавляет ID в `liked_by:{to_user}`.
+     - Если да → **Мэтч!**
+
+3. **Создание мэтча**:
+   - Запись в `matches`, публикация `match.created` в Kafka.
+   - Вызов gRPC `ChatService.CreateChat` для создания диалога.
+   - Notification Service отправляет push обоим.
+
+**Оптимизация:**
+- Проверка взаимности через Redis — O(1).
+- Дневные лимиты в Redis с TTL (не требуют очистки БД).
+- Предвычисленные рекомендации — не нужно дёргать ML-модель онлайн.
+
+---
+
+## 11. Совершение аудио/видеозвонка
+
+**Участники:**  
+Клиент → Call Service (C++), WebRTC SFU, Redis, Kafka.
+
+**Последовательность:**
+
+1. **Инициация звонка**: `POST /api/v1/calls`.
+   - Call Service проверяет права (не в ЧС, доступ к звонкам).
+   - Генерирует уникальный `call_id`, сохраняет состояние в Redis (`call:{call_id}`).
+   - Публикует `call.started` в Kafka.
+
+2. **Signalling**:
+   - Клиент Б получает уведомление.
+   - Обмен SDP через gRPC-метод `Signal` (Call Service ретранслирует).
+   - После установки signalling медиатрафик идёт напрямую (P2P) или через SFU (групповые звонки).
+
+3. **Завершение звонка**:
+   - Обновление состояния в Redis, публикация `call.ended`.
+
+**Почему C++:**
+- Низкая задержка при ретрансляции signalling.
+- Тонкая настройка сетевых буферов.
+
+---
+
+## 12. Взаимодействие с картой и геолокацией
+
+**Участники:**  
+Клиент → Maps Service (C++), Redis, PostGIS, Kafka, Friends Service.
+
+**Последовательность:**
+
+1. **Трансляция геопозиции**:
+   - Клиент устанавливает WebSocket/gRPC-стрим.
+   - Каждые 1–5 секунд отправляет координаты.
+   - Maps Service проверяет приватность (через Profile Service / Redis).
+   - Сохраняет позицию в Redis: `GEOADD live:users {lon} {lat} {user_id}`, TTL 2 мин.
+   - Публикация `location.updated` в Kafka.
+
+2. **Просмотр друзей на карте**:
+   - Запрос `GET /api/v1/maps/friends`.
+   - Maps Service получает список друзей (Friends Service), для каждого проверяет приватность и вызывает `GEORADIUS` / получает ключ `live:user:{user_id}`.
+   - Возвращает точки.
+
+3. **Сохранение места**:
+   - `POST /api/v1/maps/places` → сохранение в PostGIS (индекс GiST).
+
+**Оптимизация:**
+- Геоданные в Redis — до миллионов обновлений/сек.
+- PostGIS только для истории и сохранённых мест.
+
+---
+
+## 13. Вступление в паблик и участие в обсуждениях
+
+**Участники:**  
+Клиент → Community Service (Go) → Community DB, Redis, Kafka.
+
+**Последовательность:**
+
+1. **Вступление в открытый паблик**: gRPC `CommunityService.Join`.
+   - Запись в `community_members`.
+   - Добавление user_id в Redis SET `members:{community_id}`.
+
+2. **Вступление в закрытый паблик (заявка)**: `RequestJoin`.
+   - Запись в `join_requests`, уведомление админам.
+   - При одобрении/отклонении — аналогично открытому.
+
+3. **Комментирование**:
+   - Проверка прав (участник? не в муте?) — Redis `restrict:{community_id}:{user_id}`.
+   - Сохранение комментария в БД, публикация `community.comment`.
+   - Реакции: атомарное увеличение счётчика в Redis (`HINCRBY`), асинхронная запись в БД.
+
+**Почему Go:**
+- Нагрузка ниже, чем в чате; Go удобен для CRUD и событий.
+
+---
+
+## 14. Создание и управление пабликом (сообществом)
+
+**Участники:**  
+Клиент → Community Service (Go), Media Service, Kafka.
+
+**Последовательность:**
+
+1. **Создание**: `POST /api/v1/communities`.
+   - Проверка уникальности названия.
+   - Загрузка аватара (через Media Service, аналогично профилю).
+   - Создание записи в БД, назначение создателя администратором.
+   - Публикация `community.created`.
+
+2. **Управление**:
+   - Назначение администраторов (`AddAdmin`) — запись в БД и Redis SET `admins:{community_id}`.
+   - Изменение типа/настроек — обновление БД, инвалидация кэша.
+
+**Оптимизация прав:**
+- Кэш администраторов в Redis — быстрая проверка при каждом действии.
+
+---
+
+## 15. Управление участниками в паблике (модерация)
+
+**Участники:**  
+Админ → Community Service (Go) → Redis, БД, Kafka.
+
+**Последовательность:**
+
+1. **Временное ограничение (мут/бан)**: `POST /.../restrict`.
+   - Проверка прав модератора (Redis `admins:{community_id}`).
+   - Запись ограничения в БД (`member_restrictions`).
+   - **Сохранение в Redis** с TTL, равным сроку: `restrict:{community_id}:{user_id}` (тип бана).
+
+2. **Проверка при действии**:
+   - Community Service перед публикацией комментария проверяет наличие ключа в Redis.
+   - Если есть — отклоняет действие.
+
+3. **Исключение**:
+   - Удаление из `community_members` и Redis SET `members:{community_id}`.
+   - При необходимости — добавление в чёрный список сообщества (Redis SET `banned:{community_id}`).
+
+**Почему Redis:**
+- Проверка ограничений на каждое действие.
+- TTL автоматически снимает блокировку.
+
+---
+
+# Итоговые принципы производительности
+
+- **gRPC** для синхронных вызовов — минимум накладных расходов.
+- **Kafka** для асинхронных событий — буферизация пиков, слабая связность.
+- **Redis** для горячих данных — скорость в памяти.
+- **C++** для высоконагруженных сервисов — эффективность CPU/памяти.
+- **Go** для сервисов со средней нагрузкой — быстрота разработки.
+- **Database-per-service** + шардирование — горизонтальное масштабирование.
+- **API Gateway** — разгрузка микросервисов (валидация JWT, маршрутизация).
+
+Данная архитектура позволяет выдерживать миллионы активных пользователей, обеспечивая отзывчивый интерфейс и целостность данных.
+
+---
+# План разработки и тестирования
+
+## Фаза 1: Фундамент (Core & Auth)
+**Срок:** 3-4 недели
+**Задачи:**
+1.  **Infra:** Настройка Docker Compose (Postgres, Redis, Kafka, Kong). CI/CD (GitHub Actions).
+2.  **Go:** Реализация каркаса микросервисов (шаблон с gRPC/HTTP/Logger).
+3.  **Auth Service:** Реализация всей логики регистрации/входа, JWT, 2FA. Подключение Redis для сессий.
+4.  **Profile Service:** Базовый CRUD.
+5.  **Gateway:** Настройка маршрутов `/auth/*`.
+**Тестирование:**
+*   **Unit:** Генерация токенов, хеширование.
+*   **Int:** Проход регистрации через Gateway.
+
+## Фаза 2: Социальный граф (Friends & Search)
+**Срок:** 3 недели
+**Задачи:**
+1.  **Search Service (C++):** Подключение Kafka-клиента, реализация In-memory или Elastic индекса.
+2.  **Friends Service (Go):** API заявок, БД связей, логика блокировок.
+3.  **Notification Service (Go):** Внедрение WebSocket сервера для пушей или интеграция с Firebase.
+**Тестирование:**
+*   **E2E:** Сценарий: User A ищет User B -> Шлет заявку -> User B принимает -> Становятся друзьями.
+
+## Фаза 3: Мессенджер (Chat - MVP)
+**Срок:** 4-5 недель
+**Задачи:**
+1.  **Chat Service (C++):** Разработка WebSocket сервера (uWebSockets/Boost).
+2.  **DB:** Развертывание ScyllaDB/Cassandra. Проектирование схемы.
+3.  **Logic:** Маршрутизация сообщений, статусы (Read/Delivered).
+4.  **Frontend:** Базовый UI чата.
+**Тестирование:**
+*   **Load (k6):** Тест на удержание 10,000 одновременных соединений.
+
+## Фаза 4: Контентная часть (Feed & Channels)
+**Срок:** 4 недели
+**Задачи:**
+1.  **Channel Service (C++):** CRUD, загрузка медиа (сжатие, S3).
+2.  **Feed Service (C++):** Реализация Fan-out алгоритма на Redis.
+**Тестирование:**
+*   **Perf:** Замер времени генерации ленты для пользователя с 500 подписками.
+
+## Фаза 5: Геолокация (Maps)
+**Срок:** 3 недели
+**Задачи:**
+1.  **Maps Service (C++):** Потоковая обработка координат. Оптимизация записи в Redis (GeoHash).
+2.  **Frontend:** Интеграция карт, отрисовка маркеров.
+**Тестирование:**
+*   **Field:** Тест с реальными GPS координатами в движении.
+
+## Фаза 6: Финализация (Dating, Calls, Polish)
+**Срок:** 4-5 недель
+**Задачи:**
+1.  **ML Service (Python):** Простая коллаборативная фильтрация.
+2.  **Call Service (C++):** WebRTC сигналинг.
+3.  **Security Audit:** Пентест API, проверка прав доступа.
+**Тестирование:**
+*   **Full Cycle:** Запуск всех тестов, регрессионное тестирование.
+
+## Общий план тестирования 
+
+### 1. Автоматизированное тестирование
+*   **Unit Tests (Go/C++):** Запуск на каждый Commit. Покрытие > 70%.
+*   **Integration Tests:** В CI поднимаются Docker-контейнеры (Testcontainers). Сервисы тестируются связками (Auth + DB, Friends + Kafka).
+*   **Contract Tests (Pact):** Гарантия того, что C++ сервисы правильно читают Protobuf сообщения от Go сервисов.
+
+### 2. Нагрузочное тестирование (Performance)
+*   **Инструмент:** k6 или JMeter.
+*   **Цели:**
+    *   Chat WS: 50k RPS.
+    *   Auth Login: 2k RPS.
+    *   Feed Read: 5k RPS.
+*   **Среда:** Staging environment, максимально приближенный к Production по ресурсам.
+
+### 3. Ручное и E2E тестирование
+*   Инструменты: Postman Collections, Cypress (для Frontend).
+*   Проверка UX сценариев на мобильных устройствах.
+*   Тестирование "плохой сети" (обрывы связи в чате/звонках).
